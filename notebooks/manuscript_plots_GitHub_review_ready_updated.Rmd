@@ -1,0 +1,3451 @@
+---
+title: "Summix2 manuscript figures"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+
+# 1. Setup
+
+Package calls and figure-specific definitions are retained with the original
+figure blocks when moving them could alter exact reproducibility.
+
+# 2. Data paths and loading
+
+The notebook reads finalized analysis outputs. Machine-specific paths are
+replaced only with existing repository-relative `../results/` paths.
+
+# 3. Shared definitions
+
+No new plotting abstraction is introduced. Existing figure-specific helpers are
+preserved so the code corresponds directly to the manuscript figures.
+
+# 4. Figure 1
+
+## Reference sample size and Summix2 bias in Scenario 1
+
+Figure 1 uses the uncorrected Scenario 1 simulations, in which all five
+reference groups have the same reference sample size. Total absolute estimation error is
+shown across simulation replicates for the African American-like, Latino-like,
+and Peruvian-like simulated populations.
+
+```{r figure1-config}
+scenario1_dir <- Sys.getenv(
+  "SCENARIO1_DIR",
+  "../results/simulation/scenario_1_equal_sizes"
+)
+
+figure_dir <- Sys.getenv(
+  "FIGURE_DIR",
+  "../results/figures"
+)
+
+dir.create(
+  figure_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+figure1_sample_sizes <- c(5L,10L, 25L, 35L, 45L, 50L, 75L,
+  100L, 150L, 250L, 500L, 750L, 1000L
+)
+
+group_labels <- c(
+  AfricanAmerican = "African-American-like",
+  Latinx = "Latino-like",
+  Peruvian = "Peruvian-like"
+)
+```
+
+
+
+
+```{r figure1-read-data}
+if (!dir.exists(scenario1_dir)) {
+  stop(
+    "Scenario 1 results directory does not exist: ",
+    scenario1_dir
+  )
+}
+
+scenario1_files <- list.files(
+  scenario1_dir,
+  pattern = "\\.rds$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+if (length(scenario1_files) == 0L) {
+  stop(
+    "No Scenario 1 .rds files were found in: ",
+    scenario1_dir
+  )
+}
+
+scenario1_results <- bind_rows(
+  lapply(
+    scenario1_files,
+    readRDS
+  )
+)
+
+required_columns <- c(
+  "Group",
+  "Replicate",
+  "N_AFR",
+  "N_EAS",
+  "N_EUR",
+  "N_IAM",
+  "N_SAS",
+  "total_absolute_deviation"
+)
+
+missing_columns <- setdiff(
+  required_columns,
+  names(scenario1_results)
+)
+
+if (length(missing_columns) > 0L) {
+  stop(
+    "Scenario 1 results are missing required columns: ",
+    paste(missing_columns, collapse = ", ")
+  )
+}
+```
+
+```{r figure1-validate}
+reference_size_columns <- c(
+  "N_AFR",
+  "N_EAS",
+  "N_EUR",
+  "N_IAM",
+  "N_SAS"
+)
+
+equal_reference_sizes <- apply(
+  scenario1_results[
+    ,
+    reference_size_columns,
+    drop = FALSE
+  ],
+  1,
+  function(x) {
+    length(unique(x)) == 1L
+  }
+)
+
+if (!all(equal_reference_sizes)) {
+  stop(
+    "One or more Scenario 1 rows do not have equal ",
+    "reference sample sizes across all five reference groups."
+  )
+}
+
+scenario1_results <- scenario1_results %>%
+  mutate(
+    reference_sample_size = N_AFR
+  )
+
+unexpected_groups <- setdiff(
+  unique(scenario1_results$Group),
+  names(group_labels)
+)
+
+if (length(unexpected_groups) > 0L) {
+  stop(
+    "Unexpected simulated population labels: ",
+    paste(unexpected_groups, collapse = ", ")
+  )
+}
+```
+
+```{r}
+bias_check_sc1 <- scenario1_results %>%
+  group_by(Group, reference_sample_size) %>%
+  summarise(
+    AFR_bias = mean(bias_AFR),
+    AFR_MAE  = mean(abs(bias_AFR)),
+    EAS_bias = mean(bias_EAS),
+    EAS_MAE  = mean(abs(bias_EAS)),
+    EUR_bias = mean(bias_EUR),
+    EUR_MAE  = mean(abs(bias_EUR)),
+    IAM_bias = mean(bias_IAM),
+    IAM_MAE  = mean(abs(bias_IAM)),
+    SAS_bias = mean(bias_SAS),
+    SAS_MAE  = mean(abs(bias_SAS)),
+    .groups = "drop"
+  )
+
+bias_check_sc1
+```
+
+```{r}
+bias_check_sc1 %>%
+  filter(Group == "Latinx")
+```
+
+```{r}
+bias_check_sc1 %>%
+  filter(Group == "Peruvian")
+```
+
+```{r}
+bias_check_sc1 <- scenario1_results %>%
+  group_by(Group, N_AFR) %>%
+  summarise(
+    AFR_bias = mean(bias_AFR),
+    AFR_MAE  = mean(abs(bias_AFR)),
+    EAS_bias = mean(bias_EAS),
+    EAS_MAE  = mean(abs(bias_EAS)),
+    EUR_bias = mean(bias_EUR),
+    EUR_MAE  = mean(abs(bias_EUR)),
+    IAM_bias = mean(bias_IAM),
+    IAM_MAE  = mean(abs(bias_IAM)),
+    SAS_bias = mean(bias_SAS),
+    SAS_MAE  = mean(abs(bias_SAS)),
+    .groups = "drop"
+  )
+
+bias_check_sc1
+```
+
+```{r}
+scenario1_summary <- scenario1_results %>%
+  group_by(Group, N_AFR) %>%
+  summarise(
+    median_total_absolute_bias = median(total_absolute_deviation, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+scenario1_summary %>%
+  filter(median_total_absolute_bias <= 0.05) %>%
+  group_by(Group) %>%
+  slice_min(N_AFR, n = 1)
+```
+```{r}
+scenario1_results %>%
+  filter(N_AFR %in% c(5, 100, 150, 1000)) %>%
+  group_by(Group, N_AFR) %>%
+  summarise(
+    median_total_absolute_bias =
+      median(total_absolute_deviation, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(N_AFR, Group)
+```
+
+
+```{r figure1-prepare-data}
+figure1_data <- scenario1_results %>%
+  filter(
+    reference_sample_size %in% figure1_sample_sizes
+  ) %>%
+  mutate(
+    reference_sample_size = factor(
+      reference_sample_size,
+      levels = figure1_sample_sizes
+    ),
+    Group = factor(
+      Group,
+      levels = c(
+        "AfricanAmerican",
+        "Latinx",
+        "Peruvian"
+      ),
+      labels = unname(
+        group_labels[
+          c(
+            "AfricanAmerican",
+            "Latinx",
+            "Peruvian"
+          )
+        ]
+      )
+    )
+  )
+
+if (nrow(figure1_data) == 0L) {
+  stop("No observations remained for Figure 1.")
+}
+
+replicate_check <- figure1_data %>%
+  count(
+    Group,
+    reference_sample_size,
+    name = "n_replicates"
+  )
+
+print(replicate_check)
+```
+
+```{r figure1-plot, fig.width=12, fig.height=4.5}
+# Colorblind-friendly palette
+population_colors <- c(
+  "African-American-like" = "#9E3D3D",  # deep brick red
+  "Latino-like"           = "#168C82",  # darker teal
+  "Peruvian-like"         = "#E9B824"   # golden yellow
+)
+
+figure1 <- ggplot(
+  figure1_data,
+  aes(
+    x = reference_sample_size,
+    y = total_absolute_deviation,
+    fill = Group,
+    color = Group
+  )
+) +
+  geom_boxplot(
+    position = position_dodge(width = 0.8),
+    width = 0.7,
+    linewidth = 0.4,
+    outlier.size = 0.5,
+    alpha = 0.85
+  ) +
+  
+  # 5% bias threshold
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    linewidth = 0.5,
+    color = "black"
+  ) +
+  
+  scale_fill_manual(values = population_colors) +
+  scale_color_manual(values = population_colors) +
+  
+  labs(
+    x = "Reference sample size (N)",
+    y = "Total absolute estimation error",
+    fill = "Simulated population",
+    color = "Simulated population"
+  ) +
+  
+  theme_minimal(base_size = 14) +
+  
+  
+  theme(
+    panel.grid.minor = element_blank(),
+    
+    axis.title.x = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(t = 10)
+    ),
+    
+    axis.title.y = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(r = 10)
+    ),
+    
+    axis.text.x = element_text(
+      size = 17,
+      angle = 45,
+      hjust = 1,
+      face = "bold",
+      color="black"
+    ),
+    
+    axis.text.y = element_text(
+      size = 17,
+      face = "bold",
+      color="black"
+    ),
+    
+    legend.title = element_text(
+      size = 14,
+      face = "bold",
+      color="black"
+    ),
+    
+    legend.text = element_text(
+      size = 12
+    ),
+    
+    legend.position = "right"
+  )
+
+figure1
+
+```
+```{r}
+ggsave(
+  filename = file.path(
+    figure_dir,
+    "Figure_1_scenario_1_total_absolute_estimation_error.pdf"
+  ),
+  plot = figure1,
+  width = 12,
+  height = 5.7
+)
+
+ggsave(
+  filename = file.path(
+    figure_dir,
+    "Figure_1_scenario_1_total_absolute_estimation_error.png"
+  ),
+  plot = figure1,
+  width = 12,
+  height = 5.7,
+  dpi = 300
+)
+```
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(patchwork)
+library(cowplot)
+
+# ============================================================
+# 5. Figure 2
+# Effect of one varying reference group on Summix2 bias
+# ============================================================
+
+
+# ============================================================
+# Configuration
+# ============================================================
+
+scenario23_dir <- Sys.getenv(
+  "SCENARIO23_DIR",
+  "../results/simulation/one_varying_reference"
+)
+
+reference_groups <- c(
+  "AFR",
+  "EAS",
+  "EUR",
+  "IAM",
+  "SAS"
+)
+
+# Version D palette
+reference_group_colors <- c(
+  AFR = "#0072B2",
+  EAS = "#00A6A6",
+  EUR = "#45A778",
+  IAM = "#B51E78",
+  SAS = "#F28E2B"
+)
+
+total_bias_color <- "#37474F"
+
+
+# ============================================================
+# Read Scenario 2/3 simulation outputs
+# ============================================================
+
+if (!dir.exists(scenario23_dir)) {
+  stop(
+    "Scenario 2/3 results directory does not exist: ",
+    scenario23_dir
+  )
+}
+
+scenario23_files <- list.files(
+  scenario23_dir,
+  pattern = "\\.rds$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+if (length(scenario23_files) == 0L) {
+  stop(
+    "No Scenario 2/3 .rds files were found in: ",
+    scenario23_dir
+  )
+}
+
+scenario23_results <- bind_rows(
+  lapply(
+    scenario23_files,
+    readRDS
+  )
+)
+
+
+# ============================================================
+# Validate required columns
+# ============================================================
+
+required_columns <- c(
+  "Scenario",
+  "Group",
+  "VaryingAncestry",
+  "N_var",
+  "N_fixed",
+  "Replicate",
+  paste0(
+    "absolute_bias_",
+    reference_groups
+  ),
+  "total_absolute_deviation"
+)
+
+missing_columns <- setdiff(
+  required_columns,
+  names(scenario23_results)
+)
+
+if (length(missing_columns) > 0L) {
+  stop(
+    "Scenario 2/3 results are missing required columns: ",
+    paste(
+      missing_columns,
+      collapse = ", "
+    )
+  )
+}
+
+
+# ============================================================
+# Figure 2 function
+# ============================================================
+
+make_figure2 <- function(
+    simulation_results,
+    target_group,
+    target_scenario
+) {
+
+  # ==========================================================
+  # Select simulation setting
+  # ==========================================================
+  display_sample_sizes <- c(
+    5, 10, 25, 50, 100, 150, 250, 500
+  )
+  
+  plot_data <- simulation_results %>%
+    filter(
+      Group == target_group,
+      Scenario == target_scenario,
+      N_var %in% display_sample_sizes
+    )
+
+  if (nrow(plot_data) == 0L) {
+    stop(
+      "No observations found for the selected population/scenario."
+    )
+  }
+
+
+  # ==========================================================
+  # Identify varying reference group
+  # ==========================================================
+
+  varying_reference_group <- unique(
+    plot_data$VaryingAncestry
+  )
+
+  if (length(varying_reference_group) != 1L) {
+    stop(
+      "Expected exactly one varying reference group."
+    )
+  }
+
+
+  # ==========================================================
+  # Reference sample sizes
+  # ==========================================================
+
+  sample_sizes <- sort(
+    unique(
+      plot_data$N_var
+    )
+  )
+
+  plot_data <- plot_data %>%
+    mutate(
+      N_plot = factor(
+        N_var,
+        levels = sample_sizes
+      )
+    )
+
+
+  # ==========================================================
+  # Convert reference-group-specific absolute estimation error
+  # to long format
+  # ==========================================================
+
+  reference_group_bias_long <- plot_data %>%
+    select(
+      N_plot,
+      N_var,
+      Replicate,
+      all_of(
+        paste0(
+          "absolute_bias_",
+          reference_groups
+        )
+      )
+    ) %>%
+    pivot_longer(
+      cols = all_of(
+        paste0(
+          "absolute_bias_",
+          reference_groups
+        )
+      ),
+      names_to = "ReferenceGroup",
+      names_prefix = "absolute_bias_",
+      values_to = "AbsoluteBias"
+    ) %>%
+    mutate(
+      ReferenceGroup = factor(
+        ReferenceGroup,
+        levels = reference_groups
+      )
+    )
+
+
+  # ==========================================================
+  # Panel A data
+  # ==========================================================
+
+  varying_bias <- reference_group_bias_long %>%
+    filter(
+      as.character(
+        ReferenceGroup
+      ) == varying_reference_group
+    )
+
+
+  # ==========================================================
+  # Panel B data
+  # ==========================================================
+
+  other_bias <- reference_group_bias_long %>%
+    filter(
+      as.character(
+        ReferenceGroup
+      ) != varying_reference_group
+    )
+
+
+  # ==========================================================
+  # Panel C data
+  # ==========================================================
+
+  total_bias <- plot_data %>%
+    transmute(
+      N_plot,
+      N_var,
+      Replicate,
+      TotalAbsoluteBias =
+        total_absolute_deviation
+    )
+
+
+  # ==========================================================
+  # Fixed y-axis scales
+  # ==========================================================
+
+  common_bias_y_scale <- scale_y_continuous(
+    breaks = seq(
+      0,
+      0.40,
+      by = 0.10
+    ),
+    expand = expansion(
+      mult = c(
+        0,
+        0.02
+      )
+    )
+  )
+
+  total_bias_y_scale <- scale_y_continuous(
+    breaks = seq(
+      0,
+      0.40,
+      by = 0.10
+    ),
+    expand = expansion(
+      mult = c(
+        0,
+        0.02
+      )
+    )
+  )
+
+
+  # ==========================================================
+  # Shared x-axis
+  # ==========================================================
+
+  common_x_scale <- scale_x_discrete(
+    limits = as.character(
+      sample_sizes
+    ),
+    drop = FALSE
+  )
+
+
+  # ==========================================================
+  # Theme
+  # Thin horizontal grid lines only
+  # ==========================================================
+
+  figure2_theme <- theme_classic(
+    base_size = 14
+  ) +
+    theme(
+  
+      # Thin horizontal grid lines
+      panel.grid.major.y = element_line(
+        color = "grey90",
+        linewidth = 0.35
+      ),
+  
+      # Thin vertical grid lines
+      panel.grid.major.x = element_line(
+        color = "grey90",
+        linewidth = 0.35
+      ),
+  
+      panel.grid.minor = element_blank(),
+  
+      axis.line = element_line(
+        color = "black",
+        linewidth = 0.5
+      ),
+  
+      axis.title.x = element_blank(),
+  
+      axis.title.y = element_text(
+        size = 20,
+        face = "bold",
+        margin = margin(r = 10)
+      ),
+  
+      axis.text.x = element_text(
+        size = 17,
+        angle = 45,
+        hjust = 1,
+        vjust = 1,
+        face = "bold"
+      ),
+  
+      axis.text.y = element_text(
+        size = 17,
+        face = "bold"
+      ),
+  
+      plot.title = element_text(
+        size = 17,
+        face = "bold",
+        hjust = 0.5,
+        margin = margin(b = 8)
+      ),
+  
+      legend.position = "none",
+  
+      plot.background = element_rect(
+        fill = "white",
+        color = NA
+      ),
+  
+      panel.background = element_rect(
+        fill = "white",
+        color = NA
+      )
+    )
+
+
+  # ==========================================================
+  # Panel A
+  # ==========================================================
+
+  panel_a <- ggplot(
+    varying_bias,
+    aes(
+      x = N_plot,
+      y = AbsoluteBias,
+      fill = ReferenceGroup,
+      color = ReferenceGroup
+    )
+  ) +
+
+    geom_boxplot(
+      width = 0.70,
+      linewidth = 0.40,
+      outlier.size = 0.50,
+      outlier.alpha = 0.35,
+      alpha = 0.85
+    ) +
+
+    geom_hline(
+      yintercept = 0.05,
+      linetype = "dashed",
+      linewidth = 0.50,
+      color = "black"
+    ) +
+
+    common_x_scale +
+    common_bias_y_scale +
+
+    coord_cartesian(
+      ylim = c(
+        0,
+        0.40
+      )
+    ) +
+
+    scale_fill_manual(
+      values = reference_group_colors,
+      guide = "none"
+    ) +
+
+    scale_color_manual(
+      values = reference_group_colors,
+      guide = "none"
+    ) +
+
+    labs(
+      title = paste0(
+        "A. ",
+        varying_reference_group,
+        " reference group estimation error"
+      ),
+      x = NULL,
+      y = "Absolute estimation error"
+    ) +
+
+    figure2_theme
+
+
+  # ==========================================================
+  # Panel B
+  # ==========================================================
+
+  panel_b <- ggplot(
+    other_bias,
+    aes(
+      x = N_plot,
+      y = AbsoluteBias,
+      fill = ReferenceGroup,
+      color = ReferenceGroup
+    )
+  ) +
+
+    geom_boxplot(
+      position = position_dodge2(
+        width = 0.90,
+        preserve = "single"
+      ),
+      width = 0.80,
+      linewidth = 0.45,
+      outlier.size = 0.40,
+      outlier.alpha = 0.30,
+      alpha = 0.85
+    ) +
+
+    geom_hline(
+      yintercept = 0.05,
+      linetype = "dashed",
+      linewidth = 0.50,
+      color = "black"
+    ) +
+
+    common_x_scale +
+    common_bias_y_scale +
+
+    coord_cartesian(
+      ylim = c(
+        0,
+        0.40
+      )
+    ) +
+
+    scale_fill_manual(
+      values = reference_group_colors,
+      guide = "none"
+    ) +
+
+    scale_color_manual(
+      values = reference_group_colors,
+      guide = "none"
+    ) +
+
+    labs(
+      title = "B. Estimation error in other reference groups",
+      x = NULL,
+      y = NULL
+    ) +
+
+    figure2_theme +
+
+    theme(
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank()
+    )
+
+
+  # ==========================================================
+  # Panel C
+  # ==========================================================
+
+  panel_c <- ggplot(
+    total_bias,
+    aes(
+      x = N_plot,
+      y = TotalAbsoluteBias
+    )
+  ) +
+
+    geom_boxplot(
+      width = 0.70,
+      linewidth = 0.40,
+      outlier.size = 0.50,
+      outlier.alpha = 0.35,
+      alpha = 0.85,
+      fill = total_bias_color,
+      color = total_bias_color
+    ) +
+
+    geom_hline(
+      yintercept = 0.05,
+      linetype = "dashed",
+      linewidth = 0.50,
+      color = "black"
+    ) +
+
+    common_x_scale +
+    total_bias_y_scale +
+
+    coord_cartesian(
+      ylim = c(
+        0,
+        0.40
+      )
+    ) +
+
+    labs(
+      title = "C. Total absolute estimation error",
+      x = NULL,
+      y = "Total absolute estimation error"
+    ) +
+
+    figure2_theme
+
+
+  # ==========================================================
+  # Main three-panel layout
+  # ==========================================================
+
+  main_panels <- (
+    panel_a |
+      panel_b |
+      panel_c
+  ) +
+    plot_layout(
+      widths = c(
+        1,
+        1,
+        1
+      )
+    )
+
+
+  # ==========================================================
+  # Shared x-axis title
+  # ==========================================================
+
+  x_axis_title <- ggplot() +
+
+    annotate(
+      "text",
+      x = 0,
+      y = 0,
+      label = paste0(
+        "Varying ",
+        varying_reference_group,
+        " reference sample size (N)"
+      ),
+      size = 6,
+      fontface = "bold"
+    ) +
+
+    xlim(
+      -1,
+      1
+    ) +
+
+    ylim(
+      -1,
+      1
+    ) +
+
+    theme_void()
+
+
+  # ==========================================================
+  # Dedicated legend
+  #
+  # Uses all five reference groups so IAM is always shown.
+  # ==========================================================
+
+  legend_data <- data.frame(
+    ReferenceGroup = factor(
+      reference_groups,
+      levels = reference_groups
+    ),
+    x = seq_along(
+      reference_groups
+    ),
+    y = 1
+  )
+
+
+  legend_plot <- ggplot(
+    legend_data,
+    aes(
+      x = x,
+      y = y,
+      fill = ReferenceGroup
+    )
+  ) +
+
+    geom_tile() +
+
+    scale_fill_manual(
+      values = reference_group_colors,
+      limits = reference_groups,
+      breaks = reference_groups,
+      labels = reference_groups,
+      drop = FALSE
+    ) +
+
+    guides(
+      fill = guide_legend(
+        title = "Reference group",
+        nrow = 1,
+        byrow = TRUE,
+        override.aes = list(
+          alpha = 0.85
+        )
+      )
+    ) +
+    
+
+    theme_void() +
+    
+
+    theme(
+      legend.position = "bottom",
+
+      legend.title = element_text(
+        size = 14,
+        face = "bold"
+      ),
+
+      legend.text = element_text(
+        size = 13
+      )
+    )
+
+
+  legend_only <- cowplot::get_legend(
+    legend_plot
+  )
+
+
+  # ==========================================================
+  # Final Figure 2
+  #
+  # Order:
+  #   panels
+  #   shared x-axis title
+  #   legend
+  # ==========================================================
+
+  figure2 <- (
+    main_panels /
+      x_axis_title /
+      wrap_elements(
+        legend_only
+      )
+  ) +
+
+    plot_layout(
+      heights = c(
+        1,
+        0.07,
+        0.10
+      )
+    )
+
+
+  figure2
+}
+```
+
+```{r figure2-manuscript}
+figure2_latinx_s2 <- make_figure2(
+  scenario23_results,
+  target_group = "Latinx",
+  target_scenario = "scenario_2_one_varying_fixed_500"
+)
+
+figure2_latinx_s2
+```
+
+
+
+```{r}
+ggsave(
+  filename = file.path(
+    figure_dir,
+    "Figure_2_scenario_2.pdf"
+  ),
+  plot = figure2_latinx_s2,
+  width = 12,
+  height = 5.7
+)
+
+ggsave(
+  filename = file.path(
+    figure_dir,
+    "Figure_2_scenario_2.png"
+  ),
+  plot = figure2_latinx_s2,
+  width = 12,
+  height = 5.7,
+  dpi = 300
+)
+```
+
+
+```{r}
+# ============================================================
+# 6. Figure 3
+# Reference-sample-size correction performance across simulation scenarios
+# ============================================================
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# ------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------
+
+correction_dir <- Sys.getenv(
+  "CORRECTION_DIR",
+  "../results/correction"
+)
+
+figure_dir <- Sys.getenv(
+  "FIGURE_DIR",
+  "../results/figures"
+)
+
+dir.create(
+  figure_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+reference_groups <- c(
+  "AFR",
+  "EAS",
+  "EUR",
+  "IAM",
+  "SAS"
+)
+
+display_sample_sizes <- c(
+  5, 10, 25, 50, 100, 150, 250, 500
+)
+
+group_labels <- c(
+  AfricanAmerican = "African-American-like",
+  Latinx = "Latino-like",
+  Peruvian = "Peruvian-like"
+)
+
+scenario_labels <- c(
+  scenario_1_equal_sizes = "Scenario 1",
+  scenario_2_one_varying_fixed_500 = "Scenario 2",
+  scenario_3_one_varying_fixed_150 = "Scenario 3"
+)
+
+method_colors <- c(
+  "Uncorrected" = "#555555",
+  "1/N" = "#1B9E77",
+  "a/N^b" = "#D95F02"
+)
+
+# ------------------------------------------------------------
+# Read corrected simulation results
+# ------------------------------------------------------------
+
+if (!dir.exists(correction_dir)) {
+  stop(
+    "Correction directory does not exist: ",
+    correction_dir
+  )
+}
+
+correction_files <- list.files(
+  correction_dir,
+  pattern = "\\.rds$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+# Exclude evaluation/summary files if they are stored
+# inside the same directory.
+correction_files <- correction_files[
+  !grepl(
+    "comparison|summary|evaluation",
+    basename(correction_files),
+    ignore.case = TRUE
+  )
+]
+
+if (length(correction_files) == 0L) {
+  stop(
+    "No corrected simulation .rds files found in: ",
+    correction_dir
+  )
+}
+
+corrected_results <- bind_rows(
+  lapply(
+    correction_files,
+    readRDS
+  )
+)
+
+# ------------------------------------------------------------
+# Validate required columns
+# ------------------------------------------------------------
+
+required_columns <- c(
+  "Scenario",
+  "Group",
+  "Replicate",
+  "N_AFR",
+  "total_absolute_deviation",
+  "linear_total_absolute_deviation",
+  "powerlaw_total_absolute_deviation"
+)
+
+missing_columns <- setdiff(
+  required_columns,
+  names(corrected_results)
+)
+
+if (length(missing_columns) > 0L) {
+  stop(
+    "Corrected results are missing required columns: ",
+    paste(
+      missing_columns,
+      collapse = ", "
+    )
+  )
+}
+
+# ------------------------------------------------------------
+# Determine reference sample size for each scenario
+# ------------------------------------------------------------
+
+corrected_results <- corrected_results %>%
+  mutate(
+    reference_sample_size = case_when(
+      Scenario == "scenario_1_equal_sizes" ~ N_AFR,
+
+      Scenario %in% c(
+        "scenario_2_one_varying_fixed_500",
+        "scenario_3_one_varying_fixed_150"
+      ) ~ N_var,
+
+      TRUE ~ NA_real_
+    )
+  )
+
+if (anyNA(corrected_results$reference_sample_size)) {
+  stop(
+    "Unable to determine reference sample size for one or more rows."
+  )
+}
+
+# ------------------------------------------------------------
+# Convert correction methods to long format
+# ------------------------------------------------------------
+
+figure3_data <- corrected_results %>%
+  filter(
+    reference_sample_size %in% display_sample_sizes,
+    Scenario %in% names(scenario_labels),
+    Group %in% names(group_labels)
+  ) %>%
+  select(
+    Scenario,
+    Group,
+    Replicate,
+    reference_sample_size,
+    total_absolute_deviation,
+    linear_total_absolute_deviation,
+    powerlaw_total_absolute_deviation
+  ) %>%
+  pivot_longer(
+    cols = c(
+      total_absolute_deviation,
+      linear_total_absolute_deviation,
+      powerlaw_total_absolute_deviation
+    ),
+    names_to = "Method",
+    values_to = "TotalAbsoluteBias"
+  ) %>%
+  mutate(
+    Method = recode(
+      Method,
+      total_absolute_deviation =
+        "Uncorrected",
+      linear_total_absolute_deviation =
+        "1/N",
+      powerlaw_total_absolute_deviation =
+        "a/N^b"
+    ),
+
+    Method = factor(
+      Method,
+      levels = c(
+        "Uncorrected",
+        "1/N",
+        "a/N^b"
+      )
+    ),
+
+    Group = factor(
+      Group,
+      levels = names(group_labels),
+      labels = unname(group_labels)
+    ),
+
+    Scenario = factor(
+      Scenario,
+      levels = names(scenario_labels),
+      labels = unname(scenario_labels)
+    ),
+
+    reference_sample_size = factor(
+      reference_sample_size,
+      levels = display_sample_sizes
+    )
+  )
+
+if (nrow(figure3_data) == 0L) {
+  stop(
+    "No observations remained for Figure 3."
+  )
+}
+
+# ------------------------------------------------------------
+# Optional replicate-count check
+# ------------------------------------------------------------
+
+replicate_check <- figure3_data %>%
+  count(
+    Scenario,
+    Group,
+    reference_sample_size,
+    Method,
+    name = "n_replicates"
+  )
+
+print(
+  replicate_check
+)
+
+# ------------------------------------------------------------
+# Figure 3
+# ------------------------------------------------------------
+
+figure3 <- ggplot(
+  figure3_data,
+  aes(
+    x = reference_sample_size,
+    y = TotalAbsoluteBias,
+    fill = Method,
+    color = Method
+  )
+) +
+
+  # Shade low-reference regime: N <= 150
+  annotate(
+    "rect",
+    xmin = 0.5,
+    xmax = 6.5,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "#F3F7FA",
+    alpha = 0.45
+  ) +
+
+  geom_boxplot(
+    position = position_dodge2(
+      width = 0.88,
+      preserve = "single"
+    ),
+    width = 0.72,
+    linewidth = 0.40,
+    outlier.size = 0.30,
+    outlier.alpha = 0.25,
+    alpha = 0.85
+  ) +
+
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    linewidth = 0.50,
+    color = "black"
+  ) +
+
+  facet_grid(
+    Scenario ~ Group
+  ) +
+
+  scale_fill_manual(
+    values = method_colors,
+    labels = c(
+      "Uncorrected" = "Uncorrected Summix2",
+      "1/N" = expression(frac(1, N) ~ "correction"),
+      "a/N^b" = expression(frac(a, N^b) ~ "correction")
+    )
+  ) +
+
+  scale_color_manual(
+    values = method_colors,
+    labels = c(
+      "Uncorrected" = "Uncorrected Summix2",
+      "1/N" = expression(frac(1, N) ~ "correction"),
+      "a/N^b" = expression(frac(a, N^b) ~ "correction")
+    )
+  ) +
+
+  labs(
+    x = "Reference sample size (N)",
+    y = "Total absolute estimation error",
+    fill = NULL,
+    color = NULL
+  ) +
+
+  theme_classic(
+    base_size = 14
+  ) +
+
+  theme(
+  panel.grid.major.y = element_line(
+    color = "grey90",
+    linewidth = 0.35
+  ),
+
+  panel.grid.major.x = element_line(
+    color = "grey94",
+    linewidth = 0.3
+  ),
+
+  panel.grid.minor = element_blank(),
+
+  panel.border = element_rect(
+    color = "grey65",
+    fill = NA,
+    linewidth = 0.45
+  ),
+
+  panel.spacing.x = unit(
+    0.9,
+    "lines"
+  ),
+
+  panel.spacing.y = unit(
+    0.6,
+    "lines"
+  ),
+
+  strip.background = element_blank(),
+
+  strip.text = element_text(
+    size = 15,
+    face = "bold"
+  ),
+
+  axis.title.x = element_text(
+    size = 20,
+    face = "bold",
+    margin = margin(t = 10)
+  ),
+
+  axis.title.y = element_text(
+    size = 20,
+    face = "bold",
+    margin = margin(r = 10)
+  ),
+
+  axis.text.x = element_text(
+    size = 13,
+    angle = 45,
+    hjust = 1,
+    face = "bold"
+  ),
+
+  axis.text.y = element_text(
+    size = 13,
+    face = "bold"
+  ),
+
+  legend.position = "bottom",
+
+  legend.text = element_text(
+    size = 13
+  )
+)
+
+figure3
+
+# ------------------------------------------------------------
+# Save Figure 3
+# ------------------------------------------------------------
+
+ggsave(
+  filename = file.path(
+    figure_dir,
+    "Figure_3_bias_correction_performance.pdf"
+  ),
+  plot = figure3,
+  width = 14,
+  height = 10
+)
+
+ggsave(
+  filename = file.path(
+    figure_dir,
+    "Figure_3_bias_correction_performance.png"
+  ),
+  plot = figure3,
+  width = 14,
+  height = 10,
+  dpi = 300
+)
+```
+
+```{r}
+figure3
+```
+
+
+# 7. Figure 4A
+
+# 8. Figure 4B
+
+```{r}
+# ============================================================
+# Real-data figures
+#
+# Plot 1:
+#   Jointly limited reference sample sizes
+#
+# Plot 2:
+#   AFR reference sample size varies
+#
+# Aesthetic matched to Figure 2:
+#   - theme_classic()
+#   - horizontal grid lines only
+#   - white background
+#   - bold facet titles
+#   - no facet-strip boxes
+#   - points only
+#   - fixed y-axis across all panels
+# ============================================================
+
+library(dplyr)
+library(ggplot2)
+
+# ============================================================
+# Read evaluated real-data results
+# ============================================================
+
+real_eval <- readRDS(
+  "../results/real_data/real_data_correction_evaluation_long.rds"
+)
+
+# ============================================================
+# Configuration
+# ============================================================
+
+display_sample_sizes <- c(
+  5, 15, 25, 35, 45,
+  75, 100, 150, 250, 500
+)
+
+reference_groups <- c(
+  "AFR",
+  "EUR",
+  "IAM",
+  "SAS",
+  "EAS"
+)
+
+panel_order <- c(
+  "AFR",
+  "EUR",
+  "IAM",
+  "SAS",
+  "EAS",
+  "Total absolute deviation from benchmark"
+)
+
+method_levels <- c(
+  "Uncorrected",
+  "1/N",
+  "a/N^b"
+)
+
+method_colors <- c(
+  "Uncorrected" = "#4D4D4D",
+  "1/N"         = "#1B9E77",
+  "a/N^b"       = "#D95F02"
+)
+
+method_labels <- c(
+  "Uncorrected" = "Uncorrected Summix2",
+  "1/N"         = expression(frac(1, N) ~ "correction"),
+  "a/N^b"       = expression(frac(a, N^b) ~ "correction")
+)
+
+# ============================================================
+# Shared plotting function
+# ============================================================
+
+make_real_data_plot <- function(
+    evaluation,
+    stress_test,
+    x_axis_title
+) {
+
+  # ----------------------------------------------------------
+  # Select stress test
+  # ----------------------------------------------------------
+
+  selected <- evaluation %>%
+    filter(
+      StressTest == stress_test,
+      ReferenceSampleSize %in% display_sample_sizes
+    )
+
+  if (nrow(selected) == 0L) {
+    stop(
+      "No rows found for stress test: ",
+      stress_test
+    )
+  }
+
+  # ----------------------------------------------------------
+  # Ancestry estimate panels
+  # ----------------------------------------------------------
+
+  ancestry_data <- selected %>%
+    filter(
+      ReferenceGroup %in% reference_groups
+    ) %>%
+    transmute(
+      ReferenceSampleSize,
+      Method = as.character(Method),
+      Panel = as.character(ReferenceGroup),
+      Value = Estimate,
+      BenchmarkEstimate
+    )
+
+  # ----------------------------------------------------------
+  # Total absolute deviation panel
+  #
+  # TotalAbsoluteDeviation is repeated once for each ancestry,
+  # so retain one row per N × Method.
+  # ----------------------------------------------------------
+
+  total_data <- selected %>%
+    distinct(
+      ReferenceSampleSize,
+      Method,
+      TotalAbsoluteDeviation
+    ) %>%
+    transmute(
+      ReferenceSampleSize,
+      Method = as.character(Method),
+      Panel = "Total absolute deviation from benchmark",
+      Value = TotalAbsoluteDeviation,
+      BenchmarkEstimate = 0
+    )
+
+  # ----------------------------------------------------------
+  # Combine all six panels
+  # ----------------------------------------------------------
+
+  plot_data <- bind_rows(
+    ancestry_data,
+    total_data
+  ) %>%
+    mutate(
+      ReferenceSampleSize = factor(
+        ReferenceSampleSize,
+        levels = display_sample_sizes
+      ),
+
+      Method = factor(
+        Method,
+        levels = method_levels
+      ),
+
+      Panel = factor(
+        Panel,
+        levels = panel_order
+      )
+    )
+
+  # ----------------------------------------------------------
+  # Benchmark lines
+  #
+  # Ancestry panels:
+  #   large-reference benchmark estimate
+  #
+  # Total panel:
+  #   zero total deviation
+  # ----------------------------------------------------------
+
+  benchmark_data <- plot_data %>%
+    distinct(
+      Panel,
+      BenchmarkEstimate
+    )
+
+  # ----------------------------------------------------------
+  # Plot
+  # ----------------------------------------------------------
+
+  ggplot(
+    plot_data,
+    aes(
+      x = ReferenceSampleSize,
+      y = Value,
+      color = Method
+    )
+  ) +
+
+    # --------------------------------------------------------
+    # Benchmark line
+    # --------------------------------------------------------
+
+    geom_hline(
+      data = benchmark_data,
+      aes(
+        yintercept = BenchmarkEstimate
+      ),
+      inherit.aes = FALSE,
+      linetype = "dashed",
+      linewidth = 0.50,
+      color = "black"
+    ) +
+
+    # --------------------------------------------------------
+    # Points
+    # --------------------------------------------------------
+
+    geom_point(
+      size = 2.4,
+      alpha = 0.95,
+      position = position_dodge(
+        width = 0.35
+      )
+    ) +
+
+    # --------------------------------------------------------
+    # Facets
+    # --------------------------------------------------------
+
+    facet_wrap(
+      ~ Panel,
+      ncol = 3,
+      scales = "fixed"
+    ) +
+
+    # --------------------------------------------------------
+    # Fixed y-axis
+    #
+    # Slightly below 0 so SAS and Total benchmark lines
+    # at y = 0 remain visible.
+    # --------------------------------------------------------
+
+    scale_y_continuous(
+      limits = c(
+        -0.02,
+        0.90
+      ),
+      breaks = c(
+        0,
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ),
+      expand = expansion(
+        mult = c(
+          0,
+          0.02
+        )
+      )
+    ) +
+
+    # --------------------------------------------------------
+    # Method colors
+    # --------------------------------------------------------
+
+    scale_color_manual(
+      values = method_colors,
+      breaks = method_levels,
+      labels = method_labels,
+      drop = FALSE
+    ) +
+
+    # --------------------------------------------------------
+    # Labels
+    # --------------------------------------------------------
+
+    labs(
+      x = x_axis_title,
+      y = "Estimate / total absolute deviation",
+      color = NULL
+    ) +
+
+    # --------------------------------------------------------
+    # Figure 2-style theme
+    # --------------------------------------------------------
+
+    theme_classic(
+      base_size = 14
+    ) +
+
+    theme(
+
+     # thin horizontal and vertical grid lines
+    panel.grid.major.y = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+    
+    panel.grid.major.x = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+    
+    panel.grid.minor = element_blank(),
+
+      # axes
+      axis.line = element_line(
+        color = "black",
+        linewidth = 0.5
+      ),
+
+      axis.title.x = element_text(
+        size = 18,
+        face = "bold",
+        margin = margin(
+          t = 10
+        )
+      ),
+
+      axis.title.y = element_text(
+        size = 18,
+        face = "bold",
+        margin = margin(
+          r = 10
+        )
+      ),
+
+      axis.text.x = element_text(
+        size = 13,
+        angle = 45,
+        hjust = 1,
+        vjust = 1,
+        face = "bold"
+      ),
+
+      axis.text.y = element_text(
+        size = 13,
+        face = "bold"
+      ),
+
+      # facet titles
+      strip.background = element_blank(),
+
+      strip.text = element_text(
+        size = 16,
+        face = "bold"
+      ),
+
+      # legend
+      legend.position = "bottom",
+
+      legend.title = element_blank(),
+
+      legend.text = element_text(
+        size = 12
+      ),
+
+      legend.key.width = unit(
+        0.8,
+        "cm"
+      ),
+
+      # white manuscript background
+      plot.background = element_rect(
+        fill = "white",
+        color = NA
+      ),
+
+      panel.background = element_rect(
+        fill = "white",
+        color = NA
+      )
+    )
+}
+
+# ============================================================
+# Plot 1
+# Real data: jointly limited references
+#
+# N <= 45:
+#   AFR/EUR/IAM/SAS/EAS all use N
+#
+# N > 45:
+#   AFR/EUR/SAS/EAS continue increasing
+#   IAM remains capped at N = 45
+# ============================================================
+
+real_data_joint_plot <- make_real_data_plot(
+  evaluation = real_eval,
+  stress_test = "jointly_limited",
+  x_axis_title = "Reference sample size (N)"
+)
+
+real_data_joint_plot
+
+# ============================================================
+# Plot 2
+# Real data: AFR varies
+#
+# AFR = 5 ... 500
+# EUR/EAS/SAS = 500
+# IAM = 45
+# ============================================================
+
+real_data_vary_afr_plot <- make_real_data_plot(
+  evaluation = real_eval,
+  stress_test = "vary_AFR",
+  x_axis_title = "AFR reference sample size (N)"
+)
+
+real_data_vary_afr_plot
+
+# ============================================================
+# Save real-data figures (Figure 4A and Figure 4B)
+# ============================================================
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4A_real_data_jointly_limited.pdf"),
+  plot = real_data_joint_plot,
+  width = 14,
+  height = 10
+)
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4A_real_data_jointly_limited.png"),
+  plot = real_data_joint_plot,
+  width = 14,
+  height = 10,
+  dpi = 300
+)
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4B_real_data_vary_AFR.pdf"),
+  plot = real_data_vary_afr_plot,
+  width = 14,
+  height = 10
+)
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4B_real_data_vary_AFR.png"),
+  plot = real_data_vary_afr_plot,
+  width = 14,
+  height = 10,
+  dpi = 300
+)
+```
+
+```{r}
+# ============================================================
+# 9. Supplementary Figure S1
+# Scenario 1: reference-group-specific absolute estimation error
+# ============================================================
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+correction_dir <- "../results/correction"
+figure_dir <- "../results/figures"
+
+dir.create(
+  figure_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+# ------------------------------------------------------------
+# Settings
+# ------------------------------------------------------------
+
+reference_groups <- c(
+  "AFR", "EAS", "EUR", "IAM", "SAS"
+)
+
+display_sample_sizes <- c(
+  5, 10, 25, 50, 100, 150, 250, 500
+)
+
+group_labels <- c(
+  AfricanAmerican = "African-American-like",
+  Latinx = "Latino-like",
+  Peruvian = "Peruvian-like"
+)
+
+method_levels <- c(
+  "Uncorrected",
+  "1/N",
+  "a/N^b"
+)
+
+method_colors <- c(
+  "Uncorrected" = "#555555",
+  "1/N" = "#1B9E77",
+  "a/N^b" = "#D95F02"
+)
+
+method_labels <- c(
+  "Uncorrected" = "Uncorrected Summix2",
+  "1/N" = expression(frac(1, N) ~ "correction"),
+  "a/N^b" = expression(frac(a, N^b) ~ "correction")
+)
+
+# ------------------------------------------------------------
+# Read corrected simulation results
+# ------------------------------------------------------------
+
+correction_files <- list.files(
+  correction_dir,
+  pattern = "\\.rds$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+correction_files <- correction_files[
+  !grepl(
+    "comparison|summary|evaluation",
+    basename(correction_files),
+    ignore.case = TRUE
+  )
+]
+
+corrected_results <- bind_rows(
+  lapply(correction_files, readRDS)
+)
+
+# ------------------------------------------------------------
+# Scenario 1 only
+# ------------------------------------------------------------
+
+scenario1_results <- corrected_results %>%
+  filter(
+    Scenario == "scenario_1_equal_sizes",
+    Group %in% names(group_labels),
+    N_AFR %in% display_sample_sizes
+  )
+
+# ------------------------------------------------------------
+# Convert reference-group-specific bias to long format
+# ------------------------------------------------------------
+
+s1_long <- scenario1_results %>%
+  select(
+    Group,
+    Replicate,
+    N_AFR,
+    matches(
+      "^(absolute_bias_|linear_absolute_bias_|powerlaw_absolute_bias_)(AFR|EAS|EUR|IAM|SAS)$"
+    )
+  ) %>%
+  pivot_longer(
+    cols = -c(Group, Replicate, N_AFR),
+    names_to = "BiasVariable",
+    values_to = "AbsoluteBias"
+  ) %>%
+  mutate(
+
+    # Correction method
+    Method = case_when(
+      grepl("^linear_absolute_bias_", BiasVariable) ~ "1/N",
+      grepl("^powerlaw_absolute_bias_", BiasVariable) ~ "a/N^b",
+      grepl("^absolute_bias_", BiasVariable) ~ "Uncorrected"
+    ),
+
+    # Reference group
+    ReferenceGroup = sub(
+      "^(linear_|powerlaw_)?absolute_bias_",
+      "",
+      BiasVariable
+    ),
+
+    Method = factor(
+      Method,
+      levels = method_levels
+    ),
+
+    ReferenceGroup = factor(
+      ReferenceGroup,
+      levels = reference_groups
+    ),
+
+    Group = factor(
+      Group,
+      levels = names(group_labels),
+      labels = unname(group_labels)
+    ),
+
+    ReferenceSampleSize = factor(
+      N_AFR,
+      levels = display_sample_sizes
+    )
+  )
+
+# ------------------------------------------------------------
+# Supplementary Figure S1
+# ------------------------------------------------------------
+
+supplement_figure_s1 <- ggplot(
+  s1_long,
+  aes(
+    x = ReferenceSampleSize,
+    y = AbsoluteBias,
+    fill = Method,
+    color = Method
+  )
+) +
+
+  # Low-reference regime: N <= 150
+  annotate(
+    "rect",
+    xmin = 0.5,
+    xmax = 6.5,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "#F3F7FA",
+    alpha = 0.45
+  ) +
+
+  geom_boxplot(
+    position = position_dodge2(
+      width = 0.88,
+      preserve = "single"
+    ),
+    width = 0.72,
+    linewidth = 0.40,
+    outlier.size = 0.25,
+    outlier.alpha = 0.20,
+    alpha = 0.85
+  ) +
+
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    linewidth = 0.50,
+    color = "black"
+  ) +
+
+  # Rows = reference groups
+  # Columns = simulated admixed populations
+  facet_grid(
+    ReferenceGroup ~ Group
+  ) +
+
+  scale_fill_manual(
+    values = method_colors,
+    breaks = method_levels,
+    labels = method_labels,
+    drop = FALSE
+  ) +
+
+  scale_color_manual(
+    values = method_colors,
+    breaks = method_levels,
+    labels = method_labels,
+    drop = FALSE
+  ) +
+
+  scale_y_continuous(
+    breaks = seq(0, 0.70, by = 0.10),
+    expand = expansion(mult = c(0, 0.02))
+  ) +
+
+  # Display range only — does not remove observations
+  coord_cartesian(
+    ylim = c(0, 0.70)
+  ) +
+
+  labs(
+    x = "Reference sample size (N)",
+    y = "Absolute estimation error",
+    fill = NULL,
+    color = NULL
+  ) +
+
+  theme_classic(
+    base_size = 14
+  ) +
+
+  theme(
+    panel.grid.major.y = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+
+    panel.grid.major.x = element_line(
+      color = "grey94",
+      linewidth = 0.30
+    ),
+
+    panel.grid.minor = element_blank(),
+
+    panel.border = element_rect(
+      color = "grey65",
+      fill = NA,
+      linewidth = 0.45
+    ),
+
+    panel.spacing.x = grid::unit(
+      0.65,
+      "lines"
+    ),
+
+    panel.spacing.y = grid::unit(
+      0.45,
+      "lines"
+    ),
+
+    strip.background = element_blank(),
+
+    strip.text.x = element_text(
+      size = 15,
+      face = "bold"
+    ),
+
+    strip.text.y = element_text(
+      size = 14,
+      face = "bold"
+    ),
+
+    axis.title.x = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(t = 10)
+    ),
+
+    axis.title.y = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(r = 10)
+    ),
+
+    axis.text.x = element_text(
+      size = 11,
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      face = "bold"
+    ),
+
+    axis.text.y = element_text(
+      size = 12,
+      face = "bold"
+    ),
+
+    legend.position = "bottom",
+
+    legend.text = element_text(
+      size = 13
+    ),
+
+    plot.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+
+    panel.background = element_rect(
+      fill = "white",
+      color = NA
+    )
+  )
+
+supplement_figure_s1
+
+# ------------------------------------------------------------
+# Save
+# ------------------------------------------------------------
+
+ggsave(
+  file.path(
+    figure_dir,
+    "Supplementary_Figure_S1_scenario1_reference_group_bias.pdf"
+  ),
+  supplement_figure_s1,
+  width = 14,
+  height = 12
+)
+
+ggsave(
+  file.path(
+    figure_dir,
+    "Supplementary_Figure_S1_scenario1_reference_group_bias.png"
+  ),
+  supplement_figure_s1,
+  width = 14,
+  height = 12,
+  dpi = 300
+)
+
+```
+
+```{r}
+# ============================================================
+# 10. Supplementary Figure S2
+# Scenario 2:
+# One reference group varies;
+# remaining reference groups fixed at N = 500
+# ============================================================
+
+scenario2_results <- corrected_results %>%
+  filter(
+    grepl(
+      "scenario[_ -]?2",
+      Scenario,
+      ignore.case = TRUE
+    ),
+    Group %in% names(group_labels)
+  ) %>%
+  mutate(
+    N_var = case_when(
+      Group == "AfricanAmerican" ~ N_AFR,
+      Group == "Latinx" ~ N_IAM,
+      Group == "Peruvian" ~ N_IAM,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  filter(
+    N_var %in% display_sample_sizes
+  )
+
+if (nrow(scenario2_results) == 0L) {
+  stop("No Scenario 2 corrected results were found.")
+}
+
+# ============================================================
+# Convert reference-group-specific biases to long format
+# ============================================================
+
+s2_long <- scenario2_results %>%
+  select(
+    Group,
+    Replicate,
+    N_var,
+    matches(
+      "^(absolute_bias_|linear_absolute_bias_|powerlaw_absolute_bias_)(AFR|EAS|EUR|IAM|SAS)$"
+    )
+  ) %>%
+  pivot_longer(
+    cols = -c(
+      Group,
+      Replicate,
+      N_var
+    ),
+    names_to = "BiasVariable",
+    values_to = "AbsoluteBias"
+  ) %>%
+  mutate(
+
+    Method = case_when(
+      grepl(
+        "^linear_absolute_bias_",
+        BiasVariable
+      ) ~ "1/N",
+
+      grepl(
+        "^powerlaw_absolute_bias_",
+        BiasVariable
+      ) ~ "a/N^b",
+
+      grepl(
+        "^absolute_bias_",
+        BiasVariable
+      ) ~ "Uncorrected",
+
+      TRUE ~ NA_character_
+    ),
+
+    ReferenceGroup = BiasVariable,
+
+    ReferenceGroup = sub(
+      "^linear_absolute_bias_",
+      "",
+      ReferenceGroup
+    ),
+
+    ReferenceGroup = sub(
+      "^powerlaw_absolute_bias_",
+      "",
+      ReferenceGroup
+    ),
+
+    ReferenceGroup = sub(
+      "^absolute_bias_",
+      "",
+      ReferenceGroup
+    )
+  )
+
+# ============================================================
+# Format factors
+# ============================================================
+
+s2_long <- s2_long %>%
+  mutate(
+
+    Method = factor(
+      Method,
+      levels = method_levels
+    ),
+
+    ReferenceGroup = factor(
+      ReferenceGroup,
+      levels = reference_groups
+    ),
+
+    Group = factor(
+      Group,
+      levels = names(group_labels),
+      labels = unname(group_labels)
+    ),
+
+    ReferenceSampleSize = factor(
+      N_var,
+      levels = display_sample_sizes
+    )
+  )
+
+# ============================================================
+# Supplementary Figure S2
+# ============================================================
+
+supplement_figure_s2 <- ggplot(
+  s2_long,
+  aes(
+    x = ReferenceSampleSize,
+    y = AbsoluteBias,
+    fill = Method,
+    color = Method
+  )
+) +
+
+  annotate(
+    "rect",
+    xmin = 0.5,
+    xmax = 6.5,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "#F3F7FA",
+    alpha = 0.45
+  ) +
+
+  geom_boxplot(
+    position = position_dodge2(
+      width = 0.88,
+      preserve = "single"
+    ),
+    width = 0.72,
+    linewidth = 0.40,
+    outlier.size = 0.25,
+    outlier.alpha = 0.20,
+    alpha = 0.85
+  ) +
+
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    linewidth = 0.50,
+    color = "black"
+  ) +
+
+  facet_grid(
+    ReferenceGroup ~ Group
+  ) +
+
+  scale_y_continuous(
+    breaks = seq(
+      0,
+      0.70,
+      by = 0.10
+    ),
+    expand = expansion(
+      mult = c(
+        0,
+        0.02
+      )
+    )
+  ) +
+
+  coord_cartesian(
+    ylim = c(
+      0,
+      0.70
+    )
+  ) +
+
+  scale_fill_manual(
+    values = method_colors,
+    breaks = method_levels,
+    labels = method_labels,
+    drop = FALSE
+  ) +
+
+  scale_color_manual(
+    values = method_colors,
+    breaks = method_levels,
+    labels = method_labels,
+    drop = FALSE
+  ) +
+
+  labs(
+    x = "Varying reference-group sample size (N)",
+    y = "Absolute estimation error",
+    fill = NULL,
+    color = NULL
+  ) +
+
+  theme_classic(
+    base_size = 14
+  ) +
+
+  theme(
+
+    panel.grid.major.y = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+
+    panel.grid.major.x = element_line(
+      color = "grey94",
+      linewidth = 0.30
+    ),
+
+    panel.grid.minor = element_blank(),
+
+    panel.border = element_rect(
+      color = "grey65",
+      fill = NA,
+      linewidth = 0.45
+    ),
+
+    panel.spacing.x = grid::unit(
+      0.65,
+      "lines"
+    ),
+
+    panel.spacing.y = grid::unit(
+      0.45,
+      "lines"
+    ),
+
+    strip.background = element_blank(),
+
+    strip.text.x = element_text(
+      size = 15,
+      face = "bold"
+    ),
+
+    strip.text.y = element_text(
+      size = 14,
+      face = "bold"
+    ),
+
+    axis.title.x = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(
+        t = 10
+      )
+    ),
+
+    axis.title.y = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(
+        r = 10
+      )
+    ),
+
+    axis.text.x = element_text(
+      size = 11,
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      face = "bold"
+    ),
+
+    axis.text.y = element_text(
+      size = 12,
+      face = "bold"
+    ),
+
+    legend.position = "bottom",
+
+    legend.text = element_text(
+      size = 13
+    ),
+
+    plot.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+
+    panel.background = element_rect(
+      fill = "white",
+      color = NA
+    )
+  )
+
+supplement_figure_s2
+
+
+ggsave(
+  file.path(
+    figure_dir,
+    "Supplementary_Figure_S2_scenario2_reference_group_bias.pdf"
+  ),
+  supplement_figure_s2,
+  width = 14,
+  height = 12
+)
+
+ggsave(
+  file.path(
+    figure_dir,
+    "Supplementary_Figure_S2_scenario2_reference_group_bias.png"
+  ),
+  supplement_figure_s2,
+  width = 14,
+  height = 12,
+  dpi = 300
+)
+```
+```{r}
+# ============================================================
+# Supplementary Figure S3
+# Scenario 3:
+# One reference group varies;
+# remaining reference groups fixed at N = 150
+# ============================================================
+
+scenario3_results <- corrected_results %>%
+  filter(
+    grepl(
+      "scenario[_ -]?3",
+      Scenario,
+      ignore.case = TRUE
+    ),
+    Group %in% names(group_labels)
+  ) %>%
+  mutate(
+    N_var = case_when(
+      Group == "AfricanAmerican" ~ N_AFR,
+      Group == "Latinx" ~ N_IAM,
+      Group == "Peruvian" ~ N_IAM,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  filter(
+    N_var %in% display_sample_sizes
+  )
+
+if (nrow(scenario3_results) == 0L) {
+  stop("No Scenario 3 corrected results were found.")
+}
+
+
+# ============================================================
+# Convert reference-group-specific errors to long format
+# ============================================================
+
+s3_long <- scenario3_results %>%
+  select(
+    Group,
+    Replicate,
+    N_var,
+    matches(
+      "^(absolute_bias_|linear_absolute_bias_|powerlaw_absolute_bias_)(AFR|EAS|EUR|IAM|SAS)$"
+    )
+  ) %>%
+  pivot_longer(
+    cols = -c(
+      Group,
+      Replicate,
+      N_var
+    ),
+    names_to = "BiasVariable",
+    values_to = "AbsoluteBias"
+  ) %>%
+  mutate(
+
+    Method = case_when(
+      grepl(
+        "^linear_absolute_bias_",
+        BiasVariable
+      ) ~ "1/N",
+
+      grepl(
+        "^powerlaw_absolute_bias_",
+        BiasVariable
+      ) ~ "a/N^b",
+
+      grepl(
+        "^absolute_bias_",
+        BiasVariable
+      ) ~ "Uncorrected",
+
+      TRUE ~ NA_character_
+    ),
+
+    ReferenceGroup = BiasVariable,
+
+    ReferenceGroup = sub(
+      "^linear_absolute_bias_",
+      "",
+      ReferenceGroup
+    ),
+
+    ReferenceGroup = sub(
+      "^powerlaw_absolute_bias_",
+      "",
+      ReferenceGroup
+    ),
+
+    ReferenceGroup = sub(
+      "^absolute_bias_",
+      "",
+      ReferenceGroup
+    )
+  )
+
+
+# ============================================================
+# Format factors
+# ============================================================
+
+s3_long <- s3_long %>%
+  mutate(
+
+    Method = factor(
+      Method,
+      levels = method_levels
+    ),
+
+    ReferenceGroup = factor(
+      ReferenceGroup,
+      levels = reference_groups
+    ),
+
+    Group = factor(
+      Group,
+      levels = names(group_labels),
+      labels = unname(group_labels)
+    ),
+
+    ReferenceSampleSize = factor(
+      N_var,
+      levels = display_sample_sizes
+    )
+  )
+
+
+# ============================================================
+# Supplementary Figure S3
+# ============================================================
+
+supplement_figure_s3 <- ggplot(
+  s3_long,
+  aes(
+    x = ReferenceSampleSize,
+    y = AbsoluteBias,
+    fill = Method,
+    color = Method
+  )
+) +
+
+  annotate(
+    "rect",
+    xmin = 0.5,
+    xmax = 6.5,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "#F3F7FA",
+    alpha = 0.45
+  ) +
+
+  geom_boxplot(
+    position = position_dodge2(
+      width = 0.88,
+      preserve = "single"
+    ),
+    width = 0.72,
+    linewidth = 0.40,
+    outlier.size = 0.25,
+    outlier.alpha = 0.20,
+    alpha = 0.85
+  ) +
+
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    linewidth = 0.50,
+    color = "black"
+  ) +
+
+  facet_grid(
+    ReferenceGroup ~ Group
+  ) +
+
+  scale_y_continuous(
+    breaks = seq(
+      0,
+      0.70,
+      by = 0.10
+    ),
+    expand = expansion(
+      mult = c(
+        0,
+        0.02
+      )
+    )
+  ) +
+
+  coord_cartesian(
+    ylim = c(
+      0,
+      0.70
+    )
+  ) +
+
+  scale_fill_manual(
+    values = method_colors,
+    breaks = method_levels,
+    labels = method_labels,
+    drop = FALSE
+  ) +
+
+  scale_color_manual(
+    values = method_colors,
+    breaks = method_levels,
+    labels = method_labels,
+    drop = FALSE
+  ) +
+
+  labs(
+    x = "Varying reference-group sample size (N)",
+    y = "Absolute estimation error",
+    fill = NULL,
+    color = NULL
+  ) +
+
+  theme_classic(
+    base_size = 14
+  ) +
+
+  theme(
+
+    panel.grid.major.y = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+
+    panel.grid.major.x = element_line(
+      color = "grey94",
+      linewidth = 0.30
+    ),
+
+    panel.grid.minor = element_blank(),
+
+    panel.border = element_rect(
+      color = "grey65",
+      fill = NA,
+      linewidth = 0.45
+    ),
+
+    panel.spacing.x = grid::unit(
+      0.65,
+      "lines"
+    ),
+
+    panel.spacing.y = grid::unit(
+      0.45,
+      "lines"
+    ),
+
+    strip.background = element_blank(),
+
+    strip.text.x = element_text(
+      size = 15,
+      face = "bold"
+    ),
+
+    strip.text.y = element_text(
+      size = 14,
+      face = "bold"
+    ),
+
+    axis.title.x = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(
+        t = 10
+      )
+    ),
+
+    axis.title.y = element_text(
+      size = 20,
+      face = "bold",
+      margin = margin(
+        r = 10
+      )
+    ),
+
+    axis.text.x = element_text(
+      size = 11,
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      face = "bold"
+    ),
+
+    axis.text.y = element_text(
+      size = 12,
+      face = "bold"
+    ),
+
+    legend.position = "bottom",
+
+    legend.text = element_text(
+      size = 13
+    ),
+
+    plot.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+
+    panel.background = element_rect(
+      fill = "white",
+      color = NA
+    )
+  )
+
+supplement_figure_s3
+
+
+# ============================================================
+# Save Figure S3
+# ============================================================
+
+ggsave(
+  file.path(
+    figure_dir,
+    "Supplementary_Figure_S3_scenario3_reference_group_estimation_error.pdf"
+  ),
+  supplement_figure_s3,
+  width = 14,
+  height = 12
+)
+
+ggsave(
+  file.path(
+    figure_dir,
+    "Supplementary_Figure_S3_scenario3_reference_group_estimation_error.png"
+  ),
+  supplement_figure_s3,
+  width = 14,
+  height = 12,
+  dpi = 300
+)
+```
+# 7. Figure 4A
+
+# 8. Figure 4B
+
+```{r}
+# ============================================================
+# Real-data figures
+#
+# Plot 1:
+#   Jointly limited reference sample sizes
+#
+# Plot 2:
+#   AFR reference sample size varies
+#
+# Aesthetic matched to Figure 2:
+#   - theme_classic()
+#   - horizontal grid lines only
+#   - white background
+#   - bold facet titles
+#   - no facet-strip boxes
+#   - points only
+#   - fixed y-axis across all panels
+# ============================================================
+
+library(dplyr)
+library(ggplot2)
+
+# ============================================================
+# Read evaluated real-data results
+# ============================================================
+
+real_eval <- readRDS(
+  "../results/real_data/real_data_correction_evaluation_long.rds"
+)
+
+# ============================================================
+# Configuration
+# ============================================================
+
+display_sample_sizes <- c(
+  5, 15, 25, 35, 45,
+  75, 100, 150, 250, 500
+)
+
+reference_groups <- c(
+  "AFR",
+  "EUR",
+  "IAM",
+  "SAS",
+  "EAS"
+)
+
+panel_order <- c(
+  "AFR",
+  "EUR",
+  "IAM",
+  "SAS",
+  "EAS",
+  "Total absolute deviation from benchmark"
+)
+
+method_levels <- c(
+  "Uncorrected",
+  "1/N",
+  "a/N^b"
+)
+
+method_colors <- c(
+  "Uncorrected" = "#4D4D4D",
+  "1/N"         = "#1B9E77",
+  "a/N^b"       = "#D95F02"
+)
+
+method_labels <- c(
+      "Uncorrected" = "Uncorrected Summix2",
+      "1/N" = expression(frac(1, N) ~ "correction"),
+      "a/N^b" = expression(frac(a, N^b) ~ "correction")
+)
+
+# ============================================================
+# Shared plotting function
+# ============================================================
+
+make_real_data_plot <- function(
+    evaluation,
+    stress_test,
+    x_axis_title
+) {
+
+  # ----------------------------------------------------------
+  # Select stress test
+  # ----------------------------------------------------------
+
+  selected <- evaluation %>%
+    filter(
+      StressTest == stress_test,
+      ReferenceSampleSize %in% display_sample_sizes
+    )
+
+  if (nrow(selected) == 0L) {
+    stop(
+      "No rows found for stress test: ",
+      stress_test
+    )
+  }
+
+  # ----------------------------------------------------------
+  # Ancestry estimate panels
+  # ----------------------------------------------------------
+
+  ancestry_data <- selected %>%
+    filter(
+      ReferenceGroup %in% reference_groups
+    ) %>%
+    transmute(
+      ReferenceSampleSize,
+      Method = as.character(Method),
+      Panel = as.character(ReferenceGroup),
+      Value = Estimate,
+      BenchmarkEstimate
+    )
+
+  # ----------------------------------------------------------
+  # Total absolute deviation panel
+  #
+  # TotalAbsoluteDeviation is repeated once for each ancestry,
+  # so retain one row per N × Method.
+  # ----------------------------------------------------------
+
+  total_data <- selected %>%
+    distinct(
+      ReferenceSampleSize,
+      Method,
+      TotalAbsoluteDeviation
+    ) %>%
+    transmute(
+      ReferenceSampleSize,
+      Method = as.character(Method),
+      Panel = "Total absolute deviation from benchmark",
+      Value = TotalAbsoluteDeviation,
+      BenchmarkEstimate = 0
+    )
+
+  # ----------------------------------------------------------
+  # Combine all six panels
+  # ----------------------------------------------------------
+
+  plot_data <- bind_rows(
+    ancestry_data,
+    total_data
+  ) %>%
+    mutate(
+      ReferenceSampleSize = factor(
+        ReferenceSampleSize,
+        levels = display_sample_sizes
+      ),
+
+      Method = factor(
+        Method,
+        levels = method_levels
+      ),
+
+      Panel = factor(
+        Panel,
+        levels = panel_order
+      )
+    )
+
+  # ----------------------------------------------------------
+  # Benchmark lines
+  #
+  # Ancestry panels:
+  #   large-reference benchmark estimate
+  #
+  # Total panel:
+  #   zero total deviation
+  # ----------------------------------------------------------
+
+  benchmark_data <- plot_data %>%
+    distinct(
+      Panel,
+      BenchmarkEstimate
+    )
+
+  # ----------------------------------------------------------
+  # Plot
+  # ----------------------------------------------------------
+
+  ggplot(
+    plot_data,
+    aes(
+      x = ReferenceSampleSize,
+      y = Value,
+      color = Method
+    )
+  ) +
+
+    # --------------------------------------------------------
+    # Benchmark line
+    # --------------------------------------------------------
+
+    geom_hline(
+      data = benchmark_data,
+      aes(
+        yintercept = BenchmarkEstimate
+      ),
+      inherit.aes = FALSE,
+      linetype = "dashed",
+      linewidth = 0.50,
+      color = "black"
+    ) +
+
+    # --------------------------------------------------------
+    # Points
+    # --------------------------------------------------------
+
+    geom_point(
+      size = 2.4,
+      alpha = 0.95,
+      position = position_dodge(
+        width = 0.35
+      )
+    ) +
+
+    # --------------------------------------------------------
+    # Facets
+    # --------------------------------------------------------
+  facet_wrap(
+    ~ Panel,
+    ncol = 3,
+    scales = "fixed",
+    axes = "all",
+    axis.labels = "all"
+  )+
+
+    # --------------------------------------------------------
+    # Fixed y-axis
+    #
+    # Slightly below 0 so SAS and Total benchmark lines
+    # at y = 0 remain visible.
+    # --------------------------------------------------------
+
+    scale_y_continuous(
+      limits = c(
+        -0.02,
+        0.90
+      ),
+      breaks = c(
+        0,
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ),
+      expand = expansion(
+        mult = c(
+          0,
+          0.02
+        )
+      )
+    ) +
+
+    # --------------------------------------------------------
+    # Method colors
+    # --------------------------------------------------------
+
+    scale_color_manual(
+      values = method_colors,
+      breaks = method_levels,
+      labels = method_labels,
+      drop = FALSE
+    ) +
+
+    # --------------------------------------------------------
+    # Labels
+    # --------------------------------------------------------
+
+    labs(
+      x = x_axis_title,
+      y = "Estimated Ancestry Proportion",
+      color = NULL
+    ) +
+
+    # --------------------------------------------------------
+    # Figure 2-style theme
+    # --------------------------------------------------------
+
+    theme_classic(
+      base_size = 14
+    ) +
+
+    theme(
+
+     # thin horizontal and vertical grid lines
+    panel.grid.major.y = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+    
+    panel.grid.major.x = element_line(
+      color = "grey90",
+      linewidth = 0.35
+    ),
+    
+    panel.grid.minor = element_blank(),
+
+      # axes
+      axis.line = element_line(
+        color = "black",
+        linewidth = 0.5
+      ),
+
+      axis.title.x = element_text(
+        size = 18,
+        face = "bold",
+        margin = margin(
+          t = 10
+        )
+      ),
+
+      axis.title.y = element_text(
+        size = 18,
+        face = "bold",
+        margin = margin(
+          r = 10
+        )
+      ),
+
+      axis.text.x = element_text(
+        size = 13,
+        angle = 45,
+        hjust = 1,
+        vjust = 1,
+        face = "bold"
+      ),
+
+      axis.text.y = element_text(
+        size = 13,
+        face = "bold"
+      ),
+
+      # facet titles
+      strip.background = element_blank(),
+
+      strip.text = element_text(
+        size = 14,
+        face = "bold"
+      ),
+
+      # legend
+      legend.position = "bottom",
+
+      legend.title = element_blank(),
+
+      legend.text = element_text(
+        size = 12
+      ),
+
+      legend.key.width = unit(
+        0.8,
+        "cm"
+      ),
+
+      # white manuscript background
+      plot.background = element_rect(
+        fill = "white",
+        color = NA
+      ),
+
+      panel.background = element_rect(
+        fill = "white",
+        color = NA
+      )
+    )
+}
+
+# ============================================================
+# Plot 1
+# Real data: jointly limited references
+#
+# N <= 45:
+#   AFR/EUR/IAM/SAS/EAS all use N
+#
+# N > 45:
+#   AFR/EUR/SAS/EAS continue increasing
+#   IAM remains capped at N = 45
+# ============================================================
+
+real_data_joint_plot <- make_real_data_plot(
+  evaluation = real_eval,
+  stress_test = "jointly_limited",
+  x_axis_title = "Reference sample size (N)"
+)
+
+real_data_joint_plot
+
+# ============================================================
+# Plot 2
+# Real data: AFR varies
+#
+# AFR = 5 ... 500
+# EUR/EAS/SAS = 500
+# IAM = 45
+# ============================================================
+
+real_data_vary_afr_plot <- make_real_data_plot(
+  evaluation = real_eval,
+  stress_test = "vary_AFR",
+  x_axis_title = "AFR reference sample size (N)"
+)
+
+real_data_vary_afr_plot
+```
+
+
+```{r}
+ggsave(
+  filename = file.path(figure_dir, "Figure_4A_real_data_jointly_limited.pdf"),
+  plot = real_data_joint_plot,
+  width = 14,
+  height = 10
+)
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4A_real_data_jointly_limited.png"),
+  plot = real_data_joint_plot,
+  width = 14,
+  height = 10,
+  dpi = 300
+)
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4B_real_data_vary_AFR.pdf"),
+  plot = real_data_vary_afr_plot,
+  width = 14,
+  height = 10
+)
+
+ggsave(
+  filename = file.path(figure_dir, "Figure_4B_real_data_vary_AFR.png"),
+  plot = real_data_vary_afr_plot,
+  width = 14,
+  height = 10,
+  dpi = 300
+)
+```
+
